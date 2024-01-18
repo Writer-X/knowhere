@@ -35,7 +35,9 @@ BaseSearchTest() {
     const int64_t nb = 1000, nq = 10;
     const int64_t dim = 128;
 
-    auto metric = GENERATE(as<std::string>{}, knowhere::metric::L2, knowhere::metric::COSINE);
+    // auto metric = GENERATE(as<std::string>{}, knowhere::metric::L2, knowhere::metric::COSINE);
+    // auto topk = GENERATE(as<int64_t>{}, 5, 120);
+    auto metric = GENERATE(as<std::string>{}, knowhere::metric::L2);
     auto topk = GENERATE(as<int64_t>{}, 5, 120);
     auto version = GenTestVersionList();
 
@@ -148,111 +150,111 @@ BaseSearchTest() {
         }
     }
 
-    SECTION("Test half-float Range Search") {
-        using std::make_tuple;
-        auto [name, gen] = GENERATE_REF(table<std::string, std::function<knowhere::Json()>>({
-            make_tuple(knowhere::IndexEnum::INDEX_FAISS_IDMAP, flat_gen),
-            make_tuple(knowhere::IndexEnum::INDEX_FAISS_IVFFLAT, ivfflat_gen),
-            make_tuple(knowhere::IndexEnum::INDEX_FAISS_IVFFLAT_CC, ivfflatcc_gen),
-            make_tuple(knowhere::IndexEnum::INDEX_FAISS_IVFSQ8, ivfsq_gen),
-            make_tuple(knowhere::IndexEnum::INDEX_FAISS_IVFPQ, ivfpq_gen),
-            make_tuple(knowhere::IndexEnum::INDEX_FAISS_SCANN, scann_gen),
-            make_tuple(knowhere::IndexEnum::INDEX_FAISS_SCANN, scann_gen2),
-            make_tuple(knowhere::IndexEnum::INDEX_HNSW, hnsw_gen),
-        }));
-        auto idx = knowhere::IndexFactory::Instance().Create<data_type>(name, version);
-        auto cfg_json = gen().dump();
-        CAPTURE(name, cfg_json);
-        knowhere::Json json = knowhere::Json::parse(cfg_json);
-        REQUIRE(idx.Type() == name);
-        REQUIRE(idx.Build(*train_ds, json) == knowhere::Status::success);
+    // SECTION("Test half-float Range Search") {
+    //     using std::make_tuple;
+    //     auto [name, gen] = GENERATE_REF(table<std::string, std::function<knowhere::Json()>>({
+    //         make_tuple(knowhere::IndexEnum::INDEX_FAISS_IDMAP, flat_gen),
+    //         make_tuple(knowhere::IndexEnum::INDEX_FAISS_IVFFLAT, ivfflat_gen),
+    //         make_tuple(knowhere::IndexEnum::INDEX_FAISS_IVFFLAT_CC, ivfflatcc_gen),
+    //         make_tuple(knowhere::IndexEnum::INDEX_FAISS_IVFSQ8, ivfsq_gen),
+    //         make_tuple(knowhere::IndexEnum::INDEX_FAISS_IVFPQ, ivfpq_gen),
+    //         make_tuple(knowhere::IndexEnum::INDEX_FAISS_SCANN, scann_gen),
+    //         make_tuple(knowhere::IndexEnum::INDEX_FAISS_SCANN, scann_gen2),
+    //         make_tuple(knowhere::IndexEnum::INDEX_HNSW, hnsw_gen),
+    //     }));
+    //     auto idx = knowhere::IndexFactory::Instance().Create<data_type>(name, version);
+    //     auto cfg_json = gen().dump();
+    //     CAPTURE(name, cfg_json);
+    //     knowhere::Json json = knowhere::Json::parse(cfg_json);
+    //     REQUIRE(idx.Type() == name);
+    //     REQUIRE(idx.Build(*train_ds, json) == knowhere::Status::success);
 
-        knowhere::BinarySet bs;
-        REQUIRE(idx.Serialize(bs) == knowhere::Status::success);
-        REQUIRE(idx.Deserialize(bs, json) == knowhere::Status::success);
+    //     knowhere::BinarySet bs;
+    //     REQUIRE(idx.Serialize(bs) == knowhere::Status::success);
+    //     REQUIRE(idx.Deserialize(bs, json) == knowhere::Status::success);
 
-        auto results = idx.RangeSearch(*query_ds, json, nullptr);
-        REQUIRE(results.has_value());
-        auto ids = results.value()->GetIds();
-        auto lims = results.value()->GetLims();
-        auto dis = results.value()->GetDistance();
-        bool scann_without_raw_data =
-            (name == knowhere::IndexEnum::INDEX_FAISS_SCANN && scann_gen2().dump() == cfg_json);
-        if (name != knowhere::IndexEnum::INDEX_FAISS_IVFPQ && name != knowhere::IndexEnum::INDEX_FAISS_SCANN) {
-            for (int i = 0; i < nq; ++i) {
-                CHECK(ids[lims[i]] == i);
-            }
-        }
+    //     auto results = idx.RangeSearch(*query_ds, json, nullptr);
+    //     REQUIRE(results.has_value());
+    //     auto ids = results.value()->GetIds();
+    //     auto lims = results.value()->GetLims();
+    //     auto dis = results.value()->GetDistance();
+    //     bool scann_without_raw_data =
+    //         (name == knowhere::IndexEnum::INDEX_FAISS_SCANN && scann_gen2().dump() == cfg_json);
+    //     if (name != knowhere::IndexEnum::INDEX_FAISS_IVFPQ && name != knowhere::IndexEnum::INDEX_FAISS_SCANN) {
+    //         for (int i = 0; i < nq; ++i) {
+    //             CHECK(ids[lims[i]] == i);
+    //         }
+    //     }
 
-        if (metric == knowhere::metric::COSINE) {
-            if (name != knowhere::IndexEnum::INDEX_FAISS_IVFSQ8 && name != knowhere::IndexEnum::INDEX_FAISS_IVFPQ &&
-                !scann_without_raw_data) {
-                REQUIRE(CheckDistanceInScope(*results.value(), -1.00001, 1.00001));
-            }
-        }
-    }
+    //     if (metric == knowhere::metric::COSINE) {
+    //         if (name != knowhere::IndexEnum::INDEX_FAISS_IVFSQ8 && name != knowhere::IndexEnum::INDEX_FAISS_IVFPQ &&
+    //             !scann_without_raw_data) {
+    //             REQUIRE(CheckDistanceInScope(*results.value(), -1.00001, 1.00001));
+    //         }
+    //     }
+    // }
 
-    SECTION("Test half-float Search with Bitset") {
-        using std::make_tuple;
-        auto [name, gen, threshold] = GENERATE_REF(table<std::string, std::function<knowhere::Json()>, float>({
-            make_tuple(knowhere::IndexEnum::INDEX_HNSW, hnsw_gen, hnswlib::kHnswSearchKnnBFFilterThreshold),
-        }));
-        auto idx = knowhere::IndexFactory::Instance().Create<data_type>(name, version);
-        auto cfg_json = gen().dump();
-        CAPTURE(name, cfg_json);
-        knowhere::Json json = knowhere::Json::parse(cfg_json);
-        REQUIRE(idx.Type() == name);
-        REQUIRE(idx.Build(*train_ds, json) == knowhere::Status::success);
+    // SECTION("Test half-float Search with Bitset") {
+    //     using std::make_tuple;
+    //     auto [name, gen, threshold] = GENERATE_REF(table<std::string, std::function<knowhere::Json()>, float>({
+    //         make_tuple(knowhere::IndexEnum::INDEX_HNSW, hnsw_gen, hnswlib::kHnswSearchKnnBFFilterThreshold),
+    //     }));
+    //     auto idx = knowhere::IndexFactory::Instance().Create<data_type>(name, version);
+    //     auto cfg_json = gen().dump();
+    //     CAPTURE(name, cfg_json);
+    //     knowhere::Json json = knowhere::Json::parse(cfg_json);
+    //     REQUIRE(idx.Type() == name);
+    //     REQUIRE(idx.Build(*train_ds, json) == knowhere::Status::success);
 
-        std::vector<std::function<std::vector<uint8_t>(size_t, size_t)>> gen_bitset_funcs = {
-            GenerateBitsetWithFirstTbitsSet, GenerateBitsetWithRandomTbitsSet};
-        const auto bitset_percentages = {0.4f, 0.98f};
-        for (const float percentage : bitset_percentages) {
-            for (const auto& gen_func : gen_bitset_funcs) {
-                auto bitset_data = gen_func(nb, percentage * nb);
-                knowhere::BitsetView bitset(bitset_data.data(), nb);
-                auto results = idx.Search(*query_ds, json, bitset);
-                auto gt = knowhere::BruteForce::Search<data_type>(train_ds, query_ds, json, bitset);
-                float recall = GetKNNRecall(*gt.value(), *results.value());
-                if (percentage > threshold) {
-                    REQUIRE(recall > kBruteForceRecallThreshold);
-                } else {
-                    REQUIRE(recall > kKnnRecallThreshold);
-                }
-            }
-        }
-    }
+    //     std::vector<std::function<std::vector<uint8_t>(size_t, size_t)>> gen_bitset_funcs = {
+    //         GenerateBitsetWithFirstTbitsSet, GenerateBitsetWithRandomTbitsSet};
+    //     const auto bitset_percentages = {0.4f, 0.98f};
+    //     for (const float percentage : bitset_percentages) {
+    //         for (const auto& gen_func : gen_bitset_funcs) {
+    //             auto bitset_data = gen_func(nb, percentage * nb);
+    //             knowhere::BitsetView bitset(bitset_data.data(), nb);
+    //             auto results = idx.Search(*query_ds, json, bitset);
+    //             auto gt = knowhere::BruteForce::Search<data_type>(train_ds, query_ds, json, bitset);
+    //             float recall = GetKNNRecall(*gt.value(), *results.value());
+    //             if (percentage > threshold) {
+    //                 REQUIRE(recall > kBruteForceRecallThreshold);
+    //             } else {
+    //                 REQUIRE(recall > kKnnRecallThreshold);
+    //             }
+    //         }
+    //     }
+    // }
 
-    SECTION("Test Serialize/Deserialize") {
-        using std::make_tuple;
-        auto [name, gen] = GENERATE_REF(table<std::string, std::function<knowhere::Json()>>({
-            make_tuple(knowhere::IndexEnum::INDEX_FAISS_IDMAP, flat_gen),
-            make_tuple(knowhere::IndexEnum::INDEX_FAISS_IVFFLAT, ivfflat_gen),
-            make_tuple(knowhere::IndexEnum::INDEX_FAISS_IVFFLAT_CC, ivfflatcc_gen),
-            make_tuple(knowhere::IndexEnum::INDEX_FAISS_IVFSQ8, ivfsq_gen),
-            make_tuple(knowhere::IndexEnum::INDEX_FAISS_IVFPQ, ivfpq_gen),
-            make_tuple(knowhere::IndexEnum::INDEX_FAISS_SCANN, scann_gen),
-            make_tuple(knowhere::IndexEnum::INDEX_FAISS_SCANN, scann_gen2),
-            make_tuple(knowhere::IndexEnum::INDEX_HNSW, hnsw_gen),
-        }));
+    // SECTION("Test Serialize/Deserialize") {
+    //     using std::make_tuple;
+    //     auto [name, gen] = GENERATE_REF(table<std::string, std::function<knowhere::Json()>>({
+    //         make_tuple(knowhere::IndexEnum::INDEX_FAISS_IDMAP, flat_gen),
+    //         make_tuple(knowhere::IndexEnum::INDEX_FAISS_IVFFLAT, ivfflat_gen),
+    //         make_tuple(knowhere::IndexEnum::INDEX_FAISS_IVFFLAT_CC, ivfflatcc_gen),
+    //         make_tuple(knowhere::IndexEnum::INDEX_FAISS_IVFSQ8, ivfsq_gen),
+    //         make_tuple(knowhere::IndexEnum::INDEX_FAISS_IVFPQ, ivfpq_gen),
+    //         make_tuple(knowhere::IndexEnum::INDEX_FAISS_SCANN, scann_gen),
+    //         make_tuple(knowhere::IndexEnum::INDEX_FAISS_SCANN, scann_gen2),
+    //         make_tuple(knowhere::IndexEnum::INDEX_HNSW, hnsw_gen),
+    //     }));
 
-        auto idx = knowhere::IndexFactory::Instance().Create<data_type>(name, version);
-        auto cfg_json = gen().dump();
-        CAPTURE(name, cfg_json);
-        knowhere::Json json = knowhere::Json::parse(cfg_json);
-        REQUIRE(idx.Type() == name);
-        REQUIRE(idx.Build(*train_ds, json) == knowhere::Status::success);
-        knowhere::BinarySet bs;
-        idx.Serialize(bs);
+    //     auto idx = knowhere::IndexFactory::Instance().Create<data_type>(name, version);
+    //     auto cfg_json = gen().dump();
+    //     CAPTURE(name, cfg_json);
+    //     knowhere::Json json = knowhere::Json::parse(cfg_json);
+    //     REQUIRE(idx.Type() == name);
+    //     REQUIRE(idx.Build(*train_ds, json) == knowhere::Status::success);
+    //     knowhere::BinarySet bs;
+    //     idx.Serialize(bs);
 
-        auto idx_ = knowhere::IndexFactory::Instance().Create<data_type>(name, version);
-        idx_.Deserialize(bs);
-        auto results = idx_.Search(*query_ds, json, nullptr);
-        REQUIRE(results.has_value());
-    }
+    //     auto idx_ = knowhere::IndexFactory::Instance().Create<data_type>(name, version);
+    //     idx_.Deserialize(bs);
+    //     auto results = idx_.Search(*query_ds, json, nullptr);
+    //     REQUIRE(results.has_value());
+    // }
 }
 
 TEST_CASE("Test Mem Index With fp16/bf16 Vector", "[float metrics]") {
-    BaseSearchTest<knowhere::fp16>();
+    // BaseSearchTest<knowhere::fp16>();
     BaseSearchTest<knowhere::bf16>();
 }

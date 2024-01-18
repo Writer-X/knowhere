@@ -2,6 +2,7 @@
 
 #include "hnswlib.h"
 #include "simd/hook.h"
+#include "vector"
 
 namespace hnswlib {
 
@@ -333,6 +334,120 @@ class L2SpaceI : public SpaceInterface<int> {
     }
 
     ~L2SpaceI() {
+    }
+};
+
+static knowhere::fp16
+L2SqrFP16(const void* pVect1v, const void* pVect2v, const void* qty_ptr) {
+    // auto res = faiss::fvec_L2sqr((const float*)pVect1v, (const float*)pVect2v, *((size_t*)qty_ptr));
+    // return (knowhere::fp16)res;
+    knowhere::fp16* pVect1 = (knowhere::fp16*)pVect1v;
+    knowhere::fp16* pVect2 = (knowhere::fp16*)pVect2v;
+    // // std::cout << "pVect1: " << *pVect1 << std::endl;
+    // // std::cout << "pVect2: " << *pVect2 << std::endl;
+    size_t qty = *((size_t*)qty_ptr);
+
+    float res = 0;
+    for (size_t i = 0; i < qty; i++) {
+        float t = *pVect1 - *pVect2;
+        pVect1++;
+        pVect2++;
+        res = res +  t * t;
+    }
+    // std::cout << "res: " << res << std::endl;
+    return (knowhere::fp16)res;
+}
+
+class L2SpaceFP16 : public SpaceInterface<knowhere::fp16> {
+    DISTFUNC<knowhere::fp16> fstdistfunc_;
+    size_t data_size_;
+    size_t dim_;
+
+ public:
+    L2SpaceFP16(size_t dim) {
+        fstdistfunc_ = L2SqrFP16;
+        dim_ = dim;
+        data_size_ = dim * sizeof(knowhere::fp16);
+    }
+
+    size_t
+    get_data_size() {
+        return data_size_;
+    }
+
+    DISTFUNC<knowhere::fp16>
+    get_dist_func() {
+        return fstdistfunc_;
+    }
+
+    void*
+    get_dist_func_param() {
+        return &dim_;
+    }
+
+    ~L2SpaceFP16() {
+    }
+};
+
+static knowhere::bf16
+L2SqrBF16(const void* pVect1v, const void* pVect2v, const void* qty_ptr) {
+    // return faiss::fvec_L2sqr((const float*)pVect1v, (const float*)pVect2v, *((size_t*)qty_ptr));
+    knowhere::bf16* pVect1 = (knowhere::bf16*)pVect1v;
+    knowhere::bf16* pVect2 = (knowhere::bf16*)pVect2v;
+
+    // 将bf16转换为float
+    std::vector<float> pVect1_float;
+    std::vector<float> pVect2_float;
+
+    for (size_t i = 0; i < *((size_t*)qty_ptr); i++) {
+        pVect1_float.push_back(float(*pVect1));
+        pVect2_float.push_back(float(*pVect2));
+        pVect1++;
+        pVect2++;
+    }
+
+    return (knowhere::bf16)faiss::fvec_L2sqr(pVect1_float.data(), pVect2_float.data(), *((size_t*)qty_ptr));
+
+    // size_t qty = *((size_t*)qty_ptr);
+
+    // float res = 0;
+    // for (size_t i = 0; i < qty; i++) {
+    //     float t = *pVect1 - *pVect2;
+    //     pVect1++;
+    //     pVect2++;
+    //     res = res +  t * t;
+    // }
+    // return (knowhere::bf16)res;
+}
+
+class L2SpaceBF16 : public SpaceInterface<knowhere::bf16> {
+    DISTFUNC<knowhere::bf16> fstdistfunc_;
+    size_t data_size_;
+    size_t dim_;
+
+ public:
+    L2SpaceBF16(size_t dim) {
+        fstdistfunc_ = L2SqrBF16;
+        dim_ = dim;
+        data_size_ = dim * sizeof(knowhere::bf16);
+    }
+
+    size_t
+    get_data_size() {
+        return data_size_;
+    }
+
+    DISTFUNC<knowhere::bf16>
+    get_dist_func() {
+        return fstdistfunc_;
+    }
+
+    void*
+    get_dist_func_param() {
+        return &dim_;
+    }
+
+    ~L2SpaceBF16() {
     }
 };
 

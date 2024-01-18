@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "knowhere/bitsetview.h"
+#include "knowhere/operands.h"
 
 namespace knowhere {
 
@@ -34,8 +35,28 @@ FilterRangeSearchResultForOneNq(std::vector<float>& distances, std::vector<int64
                                 const float radius, const float range_filter);
 
 void
+Float16FilterRangeSearchResultForOneNq(std::vector<knowhere::fp16>& distances, std::vector<int64_t>& labels,
+                                       const bool is_ip, const float radius, const float range_filter);
+
+void
+BFloat16FilterRangeSearchResultForOneNq(std::vector<knowhere::bf16>& distances, std::vector<int64_t>& labels,
+                                        const bool is_ip, const float radius, const float range_filter);
+
+void
 GetRangeSearchResult(const std::vector<std::vector<float>>& result_distances,
                      const std::vector<std::vector<int64_t>>& result_labels, const bool is_ip, const int64_t nq,
                      const float radius, const float range_filter, float*& distances, int64_t*& labels, size_t*& lims);
+
+void
+Float16GetRangeSearchResult(const std::vector<std::vector<knowhere::fp16>>& result_distances,
+                            const std::vector<std::vector<int64_t>>& result_labels, const bool is_ip, const int64_t nq,
+                            const float radius, const float range_filter, knowhere::fp16*& distances, int64_t*& labels,
+                            size_t*& lims);
+
+void
+BFloat16GetRangeSearchResult(const std::vector<std::vector<knowhere::bf16>>& result_distances,
+                             const std::vector<std::vector<int64_t>>& result_labels, const bool is_ip, const int64_t nq,
+                             const float radius, const float range_filter, knowhere::bf16*& distances, int64_t*& labels,
+                             size_t*& lims);
 
 }  // namespace knowhere

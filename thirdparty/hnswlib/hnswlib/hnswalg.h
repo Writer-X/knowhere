@@ -72,11 +72,13 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
           link_list_update_locks_(max_update_element_locks),
           element_levels_(max_elements) {
         space_ = s;
-        if (auto x = dynamic_cast<L2Space*>(s)) {
+        if (auto x = dynamic_cast<L2Space*>(s) || dynamic_cast<L2SpaceFP16*>(s) || dynamic_cast<L2SpaceBF16*>(s)) {
             metric_type_ = Metric::L2;
-        } else if (auto x = dynamic_cast<InnerProductSpace*>(s)) {
+        } else if (auto x = dynamic_cast<InnerProductSpace*>(s) || dynamic_cast<InnerProductSpaceFP16*>(s) ||
+                            dynamic_cast<InnerProductSpaceBF16*>(s)) {
             metric_type_ = Metric::INNER_PRODUCT;
-        } else if (auto x = dynamic_cast<CosineSpace*>(s)) {
+        } else if (auto x = dynamic_cast<CosineSpace*>(s) || dynamic_cast<CosineSpaceFP16*>(s) ||
+                            dynamic_cast<CosineSpaceBF16*>(s)) {
             metric_type_ = Metric::COSINE;
         } else if (auto x = dynamic_cast<HammingSpace*>(s)) {
             metric_type_ = Metric::HAMMING;
@@ -228,7 +230,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
     calcDistance(const tableint id1, const tableint id2) const {
         dist_t dist = fstdistfunc_(getDataByInternalId(id1), getDataByInternalId(id2), dist_func_param_);
         if (metric_type_ == Metric::COSINE) {
-            dist /= (data_norm_l2_[id1] * data_norm_l2_[id2]);
+            dist = dist / (data_norm_l2_[id1] * data_norm_l2_[id2]);
         }
         return dist;
     }
@@ -237,7 +239,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
     calcDistance(const void* vec, const tableint id) const {
         dist_t dist = fstdistfunc_(vec, getDataByInternalId(id), dist_func_param_);
         if (metric_type_ == Metric::COSINE) {
-            dist /= data_norm_l2_[id];
+            dist = dist / data_norm_l2_[id];
         }
         return dist;
     }
@@ -685,15 +687,41 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
         readBinaryPOD(input, data_size_);
         readBinaryPOD(input, dim);
         if (metric_type_ == Metric::L2) {
-            space_ = new hnswlib::L2Space(dim);
+            if constexpr (std::is_same<dist_t, knowhere::fp16>::value) {
+                space_ = new hnswlib::L2SpaceFP16(dim);
+            } else if constexpr (std::is_same<dist_t, knowhere::bf16>::value) {
+                space_ = new hnswlib::L2SpaceBF16(dim);
+            } else {
+                space_ = new hnswlib::L2Space(dim);
+            }
         } else if (metric_type_ == Metric::INNER_PRODUCT) {
-            space_ = new hnswlib::InnerProductSpace(dim);
+            if constexpr (std::is_same<dist_t, knowhere::fp16>::value) {
+                space_ = new hnswlib::InnerProductSpaceFP16(dim);
+            } else if constexpr (std::is_same<dist_t, knowhere::bf16>::value) {
+                space_ = new hnswlib::InnerProductSpaceBF16(dim);
+            } else {
+                space_ = new hnswlib::InnerProductSpace(dim);
+            }
         } else if (metric_type_ == Metric::COSINE) {
-            space_ = new hnswlib::CosineSpace(dim);
+            if constexpr (std::is_same<dist_t, knowhere::fp16>::value) {
+                space_ = new hnswlib::InnerProductSpaceFP16(dim);
+            } else if constexpr (std::is_same<dist_t, knowhere::bf16>::value) {
+                space_ = new hnswlib::InnerProductSpaceBF16(dim);
+            } else {
+                space_ = new hnswlib::InnerProductSpace(dim);
+            }
         } else if (metric_type_ == Metric::HAMMING) {
-            space_ = new hnswlib::HammingSpace(dim);
+            if constexpr (std::is_same<dist_t, knowhere::fp16>::value || std::is_same<dist_t, knowhere::bf16>::value) {
+                throw std::runtime_error("Hamming distance does not support fp16 or bf16");
+            } else {
+                space_ = new hnswlib::HammingSpace(dim);
+            }
         } else if (metric_type_ == Metric::JACCARD) {
-            space_ = new hnswlib::JaccardSpace(dim);
+            if constexpr (std::is_same<dist_t, knowhere::fp16>::value || std::is_same<dist_t, knowhere::bf16>::value) {
+                throw std::runtime_error("Hamming distance does not support fp16 or bf16");
+            } else {
+                space_ = new hnswlib::JaccardSpace(dim);
+            }
         } else {
             throw std::runtime_error("Invalid metric type " + std::to_string(metric_type_));
         }
@@ -823,15 +851,41 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
         readBinaryPOD(input, data_size_);
         readBinaryPOD(input, dim);
         if (metric_type_ == Metric::L2) {
-            space_ = new hnswlib::L2Space(dim);
+            if constexpr (std::is_same<dist_t, knowhere::fp16>::value) {
+                space_ = new hnswlib::L2SpaceFP16(dim);
+            } else if constexpr (std::is_same<dist_t, knowhere::bf16>::value) {
+                space_ = new hnswlib::L2SpaceBF16(dim);
+            } else {
+                space_ = new hnswlib::L2Space(dim);
+            }
         } else if (metric_type_ == Metric::INNER_PRODUCT) {
-            space_ = new hnswlib::InnerProductSpace(dim);
+            if constexpr (std::is_same<dist_t, knowhere::fp16>::value) {
+                space_ = new hnswlib::InnerProductSpaceFP16(dim);
+            } else if constexpr (std::is_same<dist_t, knowhere::bf16>::value) {
+                space_ = new hnswlib::InnerProductSpaceBF16(dim);
+            } else {
+                space_ = new hnswlib::InnerProductSpace(dim);
+            }
         } else if (metric_type_ == Metric::COSINE) {
-            space_ = new hnswlib::CosineSpace(dim);
+            if constexpr (std::is_same<dist_t, knowhere::fp16>::value) {
+                space_ = new hnswlib::InnerProductSpaceFP16(dim);
+            } else if constexpr (std::is_same<dist_t, knowhere::bf16>::value) {
+                space_ = new hnswlib::InnerProductSpaceBF16(dim);
+            } else {
+                space_ = new hnswlib::InnerProductSpace(dim);
+            }
         } else if (metric_type_ == Metric::HAMMING) {
-            space_ = new hnswlib::HammingSpace(dim);
+            if constexpr (std::is_same<dist_t, knowhere::fp16>::value || std::is_same<dist_t, knowhere::bf16>::value) {
+                throw std::runtime_error("Hamming distance does not support fp16 or bf16");
+            } else {
+                space_ = new hnswlib::HammingSpace(dim);
+            }
         } else if (metric_type_ == Metric::JACCARD) {
-            space_ = new hnswlib::JaccardSpace(dim);
+            if constexpr (std::is_same<dist_t, knowhere::fp16>::value || std::is_same<dist_t, knowhere::bf16>::value) {
+                throw std::runtime_error("Hamming distance does not support fp16 or bf16");
+            } else {
+                space_ = new hnswlib::JaccardSpace(dim);
+            }
         } else {
             throw std::runtime_error("Invalid metric type " + std::to_string(metric_type_));
         }
@@ -1238,9 +1292,17 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
             return {};
 
         // do normalize for COSINE metric type
-        std::unique_ptr<float[]> query_data_norm;
+        std::unique_ptr<dist_t[]> query_data_norm;
         if (metric_type_ == Metric::COSINE) {
-            query_data_norm = knowhere::CopyAndNormalizeVecs((const float*)query_data, 1, *(size_t*)dist_func_param_);
+            if constexpr (std::is_same<dist_t, knowhere::fp16>::value) {
+            } else if constexpr (std::is_same<dist_t, knowhere::bf16>::value) {
+                query_data_norm = knowhere::CopyAndNormalizeBF16Vecs((const knowhere::bf16*)query_data, 1,
+                                                                 *(size_t*)dist_func_param_);
+            } else {
+                query_data_norm = knowhere::CopyAndNormalizeVecs((const float*)query_data, 1,
+                                                                 *(size_t*)dist_func_param_);
+            }
+            // query_data_norm = knowhere::CopyAndNormalizeVecs((const float*)query_data, 1, *(size_t*)dist_func_param_);
             query_data = query_data_norm.get();
         }
 
@@ -1256,7 +1318,8 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
             double ratio = ((double)filtered_out_num) / bitset.size();
             knowhere::knowhere_hnsw_bitset_ratio.Observe(ratio);
 #endif
-            if (filtered_out_num >= (cur_element_count * kHnswSearchKnnBFFilterThreshold) || k >= (cur_element_count - filtered_out_num) * kHnswSearchBFTopkThreshold) {
+            if (filtered_out_num >= (cur_element_count * kHnswSearchKnnBFFilterThreshold) ||
+                k >= (cur_element_count - filtered_out_num) * kHnswSearchBFTopkThreshold) {
                 return searchKnnBF(query_data, k, bitset);
             }
         }
@@ -1398,7 +1461,8 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
             double ratio = ((double)filtered_out_num) / bitset.size();
             knowhere::knowhere_hnsw_bitset_ratio.Observe(ratio);
 #endif
-            if (filtered_out_num >= (cur_element_count * kHnswSearchRangeBFFilterThreshold) || ef >= (cur_element_count - filtered_out_num) * kHnswSearchBFTopkThreshold) {
+            if (filtered_out_num >= (cur_element_count * kHnswSearchRangeBFFilterThreshold) ||
+                ef >= (cur_element_count - filtered_out_num) * kHnswSearchBFTopkThreshold) {
                 return searchRangeBF(query_data, radius, bitset);
             }
         }

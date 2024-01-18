@@ -39,14 +39,23 @@ IsFlatIndex(const knowhere::IndexType& index_type) {
 extern float
 NormalizeVec(float* x, int32_t d);
 
+extern knowhere::bf16
+NormalizeBF16Vec(knowhere::bf16* x, int32_t d);
+
 extern std::vector<float>
 NormalizeVecs(float* x, size_t rows, int32_t dim);
+
+extern std::vector<knowhere::bf16>
+NormalizeBF16Vecs(knowhere::bf16* x, size_t rows, int32_t dim);
 
 extern void
 Normalize(const DataSet& dataset);
 
 extern std::unique_ptr<float[]>
 CopyAndNormalizeVecs(const float* x, size_t rows, int32_t dim);
+
+extern std::unique_ptr<knowhere::bf16[]>
+CopyAndNormalizeBF16Vecs(const knowhere::bf16* x, size_t rows, int32_t dim);
 
 constexpr inline uint64_t seed = 0xc70f6907UL;
 

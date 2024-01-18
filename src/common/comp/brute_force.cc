@@ -36,9 +36,9 @@ BruteForce::Search(const DataSetPtr base_dataset, const DataSetPtr query_dataset
                    const BitsetView& bitset) {
     DataSetPtr base(base_dataset);
     DataSetPtr query(query_dataset);
-    if constexpr (!std::is_same_v<DataType, typename MockData<DataType>::type>) {
-        base = data_type_conversion<DataType, typename MockData<DataType>::type>(*base_dataset);
-        query = data_type_conversion<DataType, typename MockData<DataType>::type>(*query_dataset);
+    if constexpr (std::is_same_v<DataType, knowhere::fp16> || std::is_same_v<DataType, knowhere::bf16>) {
+        base = data_type_conversion<DataType, float>(*base_dataset);
+        query = data_type_conversion<DataType, float>(*query_dataset);
     }
     auto xb = base->GetTensor();
     auto nb = base->GetRows();

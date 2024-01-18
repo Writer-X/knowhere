@@ -125,6 +125,7 @@ AVX512Capable() {
 
 #include <knowhere/bitsetview.h>
 #include <knowhere/feder/HNSW.h>
+#include <knowhere/operands.h>
 #include <string.h>
 
 #include <fstream>

@@ -383,4 +383,86 @@ class InnerProductSpace : public SpaceInterface<float> {
     }
 };
 
+static knowhere::fp16
+InnerProductFP16(const void* pVect1, const void* pVect2, const void* qty_ptr) {
+    return faiss::fvec_inner_product((const float*)pVect1, (const float*)pVect2, *((size_t*)qty_ptr));
+}
+
+static knowhere::fp16
+InnerProductDistanceFP16(const void* pVect1, const void* pVect2, const void* qty_ptr) {
+    return -1.0f * InnerProductFP16(pVect1, pVect2, qty_ptr);
+}
+
+class InnerProductSpaceFP16 : public SpaceInterface<knowhere::fp16> {
+    DISTFUNC<knowhere::fp16> fstdistfunc_;
+    size_t data_size_;
+    size_t dim_;
+
+ public:
+    InnerProductSpaceFP16(size_t dim) {
+        fstdistfunc_ = InnerProductDistanceFP16;
+        dim_ = dim;
+        data_size_ = dim * sizeof(knowhere::fp16);
+    }
+
+    size_t
+    get_data_size() {
+        return data_size_;
+    }
+
+    DISTFUNC<knowhere::fp16>
+    get_dist_func() {
+        return fstdistfunc_;
+    }
+
+    void*
+    get_dist_func_param() {
+        return &dim_;
+    }
+
+    ~InnerProductSpaceFP16() {
+    }
+};
+
+static knowhere::bf16
+InnerProductBF16(const void* pVect1, const void* pVect2, const void* qty_ptr) {
+    return faiss::fvec_inner_product((const float*)pVect1, (const float*)pVect2, *((size_t*)qty_ptr));
+}
+
+static knowhere::bf16
+InnerProductDistanceBF16(const void* pVect1, const void* pVect2, const void* qty_ptr) {
+    return -1.0f * InnerProductBF16(pVect1, pVect2, qty_ptr);
+}
+
+class InnerProductSpaceBF16 : public SpaceInterface<knowhere::bf16> {
+    DISTFUNC<knowhere::bf16> fstdistfunc_;
+    size_t data_size_;
+    size_t dim_;
+
+ public:
+    InnerProductSpaceBF16(size_t dim) {
+        fstdistfunc_ = InnerProductDistanceBF16;
+        dim_ = dim;
+        data_size_ = dim * sizeof(knowhere::bf16);
+    }
+
+    size_t
+    get_data_size() {
+        return data_size_;
+    }
+
+    DISTFUNC<knowhere::bf16>
+    get_dist_func() {
+        return fstdistfunc_;
+    }
+
+    void*
+    get_dist_func_param() {
+        return &dim_;
+    }
+
+    ~InnerProductSpaceBF16() {
+    }
+};
+
 }  // namespace hnswlib

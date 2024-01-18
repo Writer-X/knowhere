@@ -40,12 +40,34 @@ NormalizeVec(float* x, int32_t d) {
     return 1.0f;
 }
 
+knowhere::bf16
+NormalizeBF16Vec(knowhere::bf16* x, int32_t d) {
+    float norm_l2_sqr = faiss::fvec_norm_L2sqr((float*)x, d);
+    if (norm_l2_sqr > 0 && std::abs(1.0f - norm_l2_sqr) > FloatAccuracy) {
+        float norm_l2 = std::sqrt(norm_l2_sqr);
+        for (int32_t i = 0; i < d; i++) {
+            x[i] = x[i] / norm_l2;
+        }
+        return (knowhere::bf16)norm_l2;
+    }
+    return (knowhere::bf16)1.0f;
+}
+
 // normalize all vectors and return their norms
 std::vector<float>
 NormalizeVecs(float* x, size_t rows, int32_t dim) {
     std::vector<float> norms(rows);
     for (size_t i = 0; i < rows; i++) {
         norms[i] = NormalizeVec(x + i * dim, dim);
+    }
+    return norms;
+}
+
+std::vector<knowhere::bf16>
+NormalizeBF16Vecs(knowhere::bf16* x, size_t rows, int32_t dim) {
+    std::vector<knowhere::bf16> norms(rows);
+    for (size_t i = 0; i < rows; i++) {
+        norms[i] = NormalizeBF16Vec(x + i * dim, dim);
     }
     return norms;
 }
@@ -69,6 +91,14 @@ CopyAndNormalizeVecs(const float* x, size_t rows, int32_t dim) {
     auto x_normalized = std::make_unique<float[]>(rows * dim);
     std::copy_n(x, rows * dim, x_normalized.get());
     NormalizeVecs(x_normalized.get(), rows, dim);
+    return x_normalized;
+}
+
+std::unique_ptr<knowhere::bf16[]>
+CopyAndNormalizeBF16Vecs(const knowhere::bf16* x, size_t rows, int32_t dim) {
+    auto x_normalized = std::make_unique<knowhere::bf16[]>(rows * dim);
+    std::copy_n(x, rows * dim, x_normalized.get());
+    NormalizeBF16Vecs(x_normalized.get(), rows, dim);
     return x_normalized;
 }
 

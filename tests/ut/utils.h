@@ -19,6 +19,7 @@
 #include <random>
 #include <set>
 #include <vector>
+#include <iostream>
 
 #include "catch2/generators/catch_generators.hpp"
 #include "common/range_util.h"

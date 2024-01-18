@@ -97,6 +97,50 @@ FilterRangeSearchResultForOneNq(std::vector<float>& distances, std::vector<int64
 }
 
 void
+Float16FilterRangeSearchResultForOneNq(std::vector<knowhere::fp16>& distances, std::vector<int64_t>& labels,
+                                       const bool is_ip, const float radius, const float range_filter) {
+    KNOWHERE_THROW_IF_NOT_FMT(distances.size() == labels.size(), "distances' size %ld not equal to labels' size %ld",
+                              distances.size(), labels.size());
+    auto len = distances.size();
+    size_t valid_cnt = 0;
+    for (size_t i = 0; i < len; i++) {
+        auto dist = float(distances[i]);
+        auto id = labels[i];
+        if (distance_in_range(dist, radius, range_filter, is_ip)) {
+            distances[valid_cnt] = knowhere::fp16(dist);
+            labels[valid_cnt] = id;
+            valid_cnt++;
+        }
+    }
+    if (valid_cnt != distances.size()) {
+        distances.resize(valid_cnt);
+        labels.resize(valid_cnt);
+    }
+}
+
+void
+BFloat16FilterRangeSearchResultForOneNq(std::vector<knowhere::bf16>& distances, std::vector<int64_t>& labels,
+                                        const bool is_ip, const float radius, const float range_filter) {
+    KNOWHERE_THROW_IF_NOT_FMT(distances.size() == labels.size(), "distances' size %ld not equal to labels' size %ld",
+                              distances.size(), labels.size());
+    auto len = distances.size();
+    size_t valid_cnt = 0;
+    for (size_t i = 0; i < len; i++) {
+        auto dist = float(distances[i]);
+        auto id = labels[i];
+        if (distance_in_range(dist, radius, range_filter, is_ip)) {
+            distances[valid_cnt] = knowhere::bf16(dist);
+            labels[valid_cnt] = id;
+            valid_cnt++;
+        }
+    }
+    if (valid_cnt != distances.size()) {
+        distances.resize(valid_cnt);
+        labels.resize(valid_cnt);
+    }
+}
+
+void
 GetRangeSearchResult(const std::vector<std::vector<float>>& result_distances,
                      const std::vector<std::vector<int64_t>>& result_labels, const bool is_ip, const int64_t nq,
                      const float radius, const float range_filter, float*& distances, int64_t*& labels, size_t*& lims) {
@@ -117,6 +161,66 @@ GetRangeSearchResult(const std::vector<std::vector<float>>& result_distances,
                         << ", range_filter " << range_filter << ", total result num " << total_valid;
 
     distances = new float[total_valid];
+    labels = new int64_t[total_valid];
+
+    for (auto i = 0; i < nq; i++) {
+        std::copy_n(result_distances[i].data(), lims[i + 1] - lims[i], distances + lims[i]);
+        std::copy_n(result_labels[i].data(), lims[i + 1] - lims[i], labels + lims[i]);
+    }
+}
+
+void
+Float16GetRangeSearchResult(const std::vector<std::vector<knowhere::fp16>>& result_distances,
+                            const std::vector<std::vector<int64_t>>& result_labels, const bool is_ip, const int64_t nq,
+                            const float radius, const float range_filter, knowhere::fp16*& distances, int64_t*& labels,
+                            size_t*& lims) {
+    KNOWHERE_THROW_IF_NOT_FMT(result_distances.size() == (size_t)nq, "result distances size %ld not equal to %" SCNd64,
+                              result_distances.size(), nq);
+    KNOWHERE_THROW_IF_NOT_FMT(result_labels.size() == (size_t)nq, "result labels size %ld not equal to %" SCNd64,
+                              result_labels.size(), nq);
+
+    lims = new size_t[nq + 1];
+    lims[0] = 0;
+    // all distances must be in range scope
+    for (int64_t i = 0; i < nq; i++) {
+        lims[i + 1] = lims[i] + result_distances[i].size();
+    }
+
+    size_t total_valid = lims[nq];
+    LOG_KNOWHERE_DEBUG_ << "Range search: is_ip " << (is_ip ? "True" : "False") << ", radius " << radius
+                        << ", range_filter " << range_filter << ", total result num " << total_valid;
+
+    distances = new knowhere::fp16[total_valid];
+    labels = new int64_t[total_valid];
+
+    for (auto i = 0; i < nq; i++) {
+        std::copy_n(result_distances[i].data(), lims[i + 1] - lims[i], distances + lims[i]);
+        std::copy_n(result_labels[i].data(), lims[i + 1] - lims[i], labels + lims[i]);
+    }
+}
+
+void
+BFloat16GetRangeSearchResult(const std::vector<std::vector<knowhere::bf16>>& result_distances,
+                             const std::vector<std::vector<int64_t>>& result_labels, const bool is_ip, const int64_t nq,
+                             const float radius, const float range_filter, knowhere::bf16*& distances, int64_t*& labels,
+                             size_t*& lims) {
+    KNOWHERE_THROW_IF_NOT_FMT(result_distances.size() == (size_t)nq, "result distances size %ld not equal to %" SCNd64,
+                              result_distances.size(), nq);
+    KNOWHERE_THROW_IF_NOT_FMT(result_labels.size() == (size_t)nq, "result labels size %ld not equal to %" SCNd64,
+                              result_labels.size(), nq);
+
+    lims = new size_t[nq + 1];
+    lims[0] = 0;
+    // all distances must be in range scope
+    for (int64_t i = 0; i < nq; i++) {
+        lims[i + 1] = lims[i] + result_distances[i].size();
+    }
+
+    size_t total_valid = lims[nq];
+    LOG_KNOWHERE_DEBUG_ << "Range search: is_ip " << (is_ip ? "True" : "False") << ", radius " << radius
+                        << ", range_filter " << range_filter << ", total result num " << total_valid;
+
+    distances = new knowhere::bf16[total_valid];
     labels = new int64_t[total_valid];
 
     for (auto i = 0; i < nq; i++) {

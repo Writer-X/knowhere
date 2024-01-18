@@ -31,11 +31,12 @@
 namespace knowhere {
 template <typename DataType>
 class HnswIndexNode : public IndexNode {
-    static_assert(std::is_same_v<DataType, fp32> || std::is_same_v<DataType, bin1>,
-                  "HnswIndexNode only support float/bianry");
+    static_assert(std::is_same_v<DataType, fp32> || std::is_same_v<DataType, bin1> || std::is_same_v<DataType, fp16> ||
+                      std::is_same_v<DataType, bf16>,
+                  "HnswIndexNode only support float/bianry/float16/bfloat16");
 
  public:
-    using DistType = float;
+    using DistType = typename std::conditional_t<std::is_same_v<DataType, bin1>, float, DataType>;
     HnswIndexNode(const int32_t& /*version*/, const Object& object) : index_(nullptr) {
         search_pool_ = ThreadPool::GetGlobalSearchThreadPool();
     }
@@ -47,15 +48,43 @@ class HnswIndexNode : public IndexNode {
         auto hnsw_cfg = static_cast<const HnswConfig&>(cfg);
         hnswlib::SpaceInterface<DistType>* space = nullptr;
         if (IsMetricType(hnsw_cfg.metric_type.value(), metric::L2)) {
-            space = new (std::nothrow) hnswlib::L2Space(dim);
+            if constexpr (std::is_same_v<DistType, fp16>) {
+                space = new (std::nothrow) hnswlib::L2SpaceFP16(dim);
+            } else if constexpr (std::is_same_v<DistType, bf16>) {
+                space = new (std::nothrow) hnswlib::L2SpaceBF16(dim);
+            } else {
+                space = new (std::nothrow) hnswlib::L2Space(dim);
+            }
         } else if (IsMetricType(hnsw_cfg.metric_type.value(), metric::IP)) {
-            space = new (std::nothrow) hnswlib::InnerProductSpace(dim);
+            if constexpr (std::is_same_v<DistType, fp16>) {
+                space = new (std::nothrow) hnswlib::L2SpaceFP16(dim);
+            } else if constexpr (std::is_same_v<DistType, bf16>) {
+                space = new (std::nothrow) hnswlib::L2SpaceBF16(dim);
+            } else {
+                space = new (std::nothrow) hnswlib::InnerProductSpace(dim);
+            }
         } else if (IsMetricType(hnsw_cfg.metric_type.value(), metric::COSINE)) {
-            space = new (std::nothrow) hnswlib::CosineSpace(dim);
+            if constexpr (std::is_same_v<DistType, fp16>) {
+                space = new (std::nothrow) hnswlib::CosineSpaceFP16(dim);
+            } else if constexpr (std::is_same_v<DistType, bf16>) {
+                space = new (std::nothrow) hnswlib::CosineSpaceBF16(dim);
+            } else {
+                space = new (std::nothrow) hnswlib::CosineSpace(dim);
+            }
         } else if (IsMetricType(hnsw_cfg.metric_type.value(), metric::HAMMING)) {
-            space = new (std::nothrow) hnswlib::HammingSpace(dim);
+            if constexpr (std::is_same_v<DistType, fp16> || std::is_same_v<DistType, bf16>) {
+                LOG_KNOWHERE_WARNING_ << "HAMMING metric not support fp16/bf16";
+                return Status::invalid_metric_type;
+            } else {
+                space = new (std::nothrow) hnswlib::HammingSpace(dim);
+            }
         } else if (IsMetricType(hnsw_cfg.metric_type.value(), metric::JACCARD)) {
-            space = new (std::nothrow) hnswlib::JaccardSpace(dim);
+            if constexpr (std::is_same_v<DistType, fp16> || std::is_same_v<DistType, bf16>) {
+                LOG_KNOWHERE_WARNING_ << "JACCARD metric not support fp16/bf16";
+                return Status::invalid_metric_type;
+            } else {
+                space = new (std::nothrow) hnswlib::JaccardSpace(dim);
+            }
         } else {
             LOG_KNOWHERE_WARNING_ << "metric type not support in hnsw: " << hnsw_cfg.metric_type.value();
             return Status::invalid_metric_type;
@@ -204,7 +233,11 @@ class HnswIndexNode : public IndexNode {
                 auto p_single_id = p_id + idx * k;
                 for (size_t idx = 0; idx < rst_size; ++idx) {
                     const auto& [dist, id] = rst[idx];
-                    p_single_dis[idx] = transform ? (-dist) : dist;
+                    if (transform) {
+                        p_single_dis[idx] = (-dist);
+                    } else {
+                        p_single_dis[idx] = dist;
+                    }
                     p_single_id[idx] = id;
                 }
                 for (size_t idx = rst_size; idx < (size_t)k; idx++) {
@@ -217,7 +250,7 @@ class HnswIndexNode : public IndexNode {
             fut.wait();
         }
 
-        auto res = GenResultDataSet(nq, k, p_id, p_dist);
+        auto res = GenResultDataSet(nq, k, p_id, (const float*)p_dist);
 
         // set visit_info json string into result dataset
         if (feder_result != nullptr) {
@@ -241,7 +274,7 @@ class HnswIndexNode : public IndexNode {
             UpdateNext();
         }
 
-        std::pair<int64_t, DistType>
+        std::pair<int64_t, float>
         Next() override {
             auto ret = std::make_pair(next_id_, next_dist_);
             UpdateNext();
@@ -259,7 +292,11 @@ class HnswIndexNode : public IndexNode {
             auto next = index_->getIteratorNext(workspace_.get());
             if (next.has_value()) {
                 auto [dist, id] = next.value();
-                next_dist_ = transform_ ? (-dist) : dist;
+                if (transform_) {
+                    next_dist_ = (-dist);
+                } else {
+                    next_dist_ = dist;
+                }
                 next_id_ = id;
                 has_next_ = true;
             } else {
@@ -355,13 +392,25 @@ class HnswIndexNode : public IndexNode {
                 result_id_array[idx].resize(elem_cnt);
                 for (size_t j = 0; j < elem_cnt; j++) {
                     auto& p = rst[j];
-                    result_dist_array[idx][j] = (is_ip ? (-p.first) : p.first);
+                    if (is_ip) {
+                        result_dist_array[idx][j] = (-p.first);
+                    } else {
+                        result_dist_array[idx][j] = p.first;
+                    }
                     result_id_array[idx][j] = p.second;
                 }
                 result_size[idx] = rst.size();
                 if (hnsw_cfg.range_filter.value() != defaultRangeFilter) {
-                    FilterRangeSearchResultForOneNq(result_dist_array[idx], result_id_array[idx], is_ip,
-                                                    radius_for_filter, range_filter);
+                    if constexpr (std::is_same_v<DistType, fp16>) {
+                        Float16FilterRangeSearchResultForOneNq(result_dist_array[idx], result_id_array[idx], is_ip,
+                                                               radius_for_filter, range_filter);
+                    } else if constexpr (std::is_same_v<DistType, bf16>) {
+                        BFloat16FilterRangeSearchResultForOneNq(result_dist_array[idx], result_id_array[idx], is_ip,
+                                                                radius_for_filter, range_filter);
+                    } else {
+                        FilterRangeSearchResultForOneNq(result_dist_array[idx], result_id_array[idx], is_ip,
+                                                        radius_for_filter, range_filter);
+                    }
                 }
             }));
         }
@@ -370,10 +419,18 @@ class HnswIndexNode : public IndexNode {
         }
 
         // filter range search result
-        GetRangeSearchResult(result_dist_array, result_id_array, is_ip, nq, radius_for_filter, range_filter, dis, ids,
-                             lims);
+        if constexpr (std::is_same_v<DistType, fp16>) {
+            Float16GetRangeSearchResult(result_dist_array, result_id_array, is_ip, nq, radius_for_filter,
+                                           range_filter, dis, ids, lims);
+        } else if constexpr (std::is_same_v<DistType, bf16>) {
+            BFloat16GetRangeSearchResult(result_dist_array, result_id_array, is_ip, nq, radius_for_filter,
+                                            range_filter, dis, ids, lims);
+        } else {
+            GetRangeSearchResult(result_dist_array, result_id_array, is_ip, nq, radius_for_filter, range_filter,
+                                    dis, ids, lims);
+        }
 
-        auto res = GenResultDataSet(nq, ids, dis, lims);
+        auto res = GenResultDataSet(nq, ids, (const float*)dis, lims);
 
         // set visit_info json string into result dataset
         if (feder_result != nullptr) {
@@ -592,6 +649,8 @@ class HnswIndexNode : public IndexNode {
 
 KNOWHERE_SIMPLE_REGISTER_GLOBAL(HNSW, HnswIndexNode, fp32);
 KNOWHERE_SIMPLE_REGISTER_GLOBAL(HNSW, HnswIndexNode, bin1);
-KNOWHERE_MOCK_REGISTER_GLOBAL(HNSW, HnswIndexNode, fp16);
-KNOWHERE_MOCK_REGISTER_GLOBAL(HNSW, HnswIndexNode, bf16);
+KNOWHERE_SIMPLE_REGISTER_GLOBAL(HNSW, HnswIndexNode, fp16);
+KNOWHERE_SIMPLE_REGISTER_GLOBAL(HNSW, HnswIndexNode, bf16);
+// KNOWHERE_MOCK_REGISTER_GLOBAL(HNSW, HnswIndexNode, fp16);
+// KNOWHERE_MOCK_REGISTER_GLOBAL(HNSW, HnswIndexNode, bf16);
 }  // namespace knowhere
